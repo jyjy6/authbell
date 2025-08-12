@@ -14,6 +14,8 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.ResponseCookie;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -22,6 +24,7 @@ import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.time.Duration;
 import java.util.*;
 
 
@@ -31,6 +34,17 @@ public class JWTFilter extends OncePerRequestFilter {
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
     private static final String REFRESH_TOKEN_ENDPOINT = "/api/refresh-token";
     private final JWTUtil jwtUtil;
+
+    /**
+     * 액세스토큰 뭔가의 이상으로 빠졌을때용
+     * */
+    @Value("${app.production}")
+    private String appEnv;
+    boolean isProduction = "production".equalsIgnoreCase(appEnv);
+    @Value("${app.cookie.domain}")
+    private String cookieDomain;
+
+
 
 
 //    private final String allowedOrigins; // Spring Security->SecurityConfig 생성자를 통해 주입
@@ -90,10 +104,11 @@ public class JWTFilter extends OncePerRequestFilter {
         // 요청에서 JWT 추출
 
         String jwt = getJwtFromRequest(request);
+        String refreshJwt = getRefreshJwtFromRequest(request);
 
         System.out.println("현재jwt"+jwt);
 
-        if (jwt != null) {
+        if (jwt != null && refreshJwt != null) {
             try {
                 // JWT 유효성 검증
                 System.out.println("만료됐는지 확인1");
@@ -136,7 +151,19 @@ public class JWTFilter extends OncePerRequestFilter {
                 return; // 필터 체인 종료
             }
         } else {
-            response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "토큰없음");
+            String username = jwtUtil.extractUsername(refreshJwt);
+            // 새 accessToken 생성
+            String newAccessToken = jwtUtil.refreshAccessToken(username);
+            ResponseCookie accessCookie = ResponseCookie.from("accessToken", newAccessToken)
+                    .maxAge(Duration.ofMinutes(20)) // 20분
+                    .httpOnly(true)
+                    .secure(isProduction) // HTTPS 환경이면 true
+                    .path("/")
+                    .domain(cookieDomain) // 예: "yourdomain.com"
+                    .sameSite("Strict")   // 옵션: 필요시 조정 ("Lax", "Strict", "None")
+                    .build();
+            // 👉 응답 헤더에 쿠키 추가
+            response.addHeader("Set-Cookie", accessCookie.toString());
         }
 
         filterChain.doFilter(request, response);
@@ -158,6 +185,18 @@ public class JWTFilter extends OncePerRequestFilter {
         String bearerToken = request.getHeader("Authorization");
         if (bearerToken != null && bearerToken.startsWith("Bearer ")) {
             return bearerToken.substring(7); // "Bearer " 제거
+        }
+        return null;
+    }
+
+    private String getRefreshJwtFromRequest(HttpServletRequest request) {
+        // 1. 쿠키에서 refreshToken 찾기
+        if (request.getCookies() != null) {
+            for (jakarta.servlet.http.Cookie cookie : request.getCookies()) {
+                if ("refreshToken".equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
         }
         return null;
     }

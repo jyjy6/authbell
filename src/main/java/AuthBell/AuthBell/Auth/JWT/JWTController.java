@@ -80,7 +80,7 @@ public class JWTController {
 
 
             ResponseCookie accessCookie = ResponseCookie.from("accessToken", accessToken)
-                    .maxAge(Duration.ofSeconds(20))
+                    .maxAge(Duration.ofSeconds(60))
                     .httpOnly(true)
                     .secure(isProduction)
                     .path("/")
@@ -196,7 +196,7 @@ public class JWTController {
 
             // 👉 ResponseCookie 객체 생성 (Spring Web)
             ResponseCookie accessCookie = ResponseCookie.from("accessToken", newAccessToken)
-                    .maxAge(Duration.ofMinutes(20)) // 20분
+                    .maxAge(Duration.ofSeconds(20)) // 20분
                     .httpOnly(true)
                     .secure(isProduction) // HTTPS 환경이면 true
                     .path("/")

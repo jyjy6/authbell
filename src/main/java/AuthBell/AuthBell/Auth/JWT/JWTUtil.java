@@ -104,7 +104,7 @@ public class JWTUtil {
                 .setSubject(member.getUsername())
                 .claim("userInfo", memberJson) // JSON 형태로 저장
                 .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + 900000))
+                .expiration(new Date(System.currentTimeMillis() + 20000))
                 .signWith(privateKey)
                 .compact();
     }
